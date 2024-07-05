@@ -18,6 +18,8 @@ import org.springframework.batch.core.Job;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
+import org.springframework.core.task.TaskExecutor;
 
 import com.spring.batch.model.CarDetails;
 
@@ -26,16 +28,24 @@ import com.spring.batch.model.CarDetails;
 public class BatchConfig {
 	
 	@Bean
+    TaskExecutor taskExecutor() {
+        return new SimpleAsyncTaskExecutor("spring_batch");
+    }
+	
+	
+	@Bean
 	Job getJob(JobBuilderFactory jobBuilderFactory, 
 			   StepBuilderFactory stepBuilderFactory,
 			ItemReader<CarDetails> itemReader,
 			ItemProcessor<CarDetails, CarDetails> itemProcessor,
 			ItemWriter<CarDetails> itemWriter) {
 		Step step = stepBuilderFactory.get("car-details-step")
-				.<CarDetails, CarDetails>chunk(100) //this is because chunk requires input and output type of similar to processor
-				.reader(itemReader) 
+				.<CarDetails, CarDetails>chunk(3) //this is because chunk requires input and output type of similar to processor
+				.reader(itemReader)  //reads data from file and convert to object
 				.processor(itemProcessor) //this takes the input as functional interface, so we have to create one and implement the process
-				.writer(itemWriter)
+				.writer(itemWriter) //this calls the write method 
+				.taskExecutor(taskExecutor()) // optional to Set the task executor for multi-threaded chunk
+	            .throttleLimit(4) //optional if you need to go with the multi-threaded chunk
 				.build();
 	
 		return jobBuilderFactory
@@ -43,8 +53,8 @@ public class BatchConfig {
 				.incrementer(new RunIdIncrementer()) //batch run ID
 				.start(step) //for multiple steps use .flow(step).next(step)...so on
 				.build();
-	}
-
+	}	
+	
 	@Bean
 	@StepScope
      FlatFileItemReader<CarDetails> itemReader() {
